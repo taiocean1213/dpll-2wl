@@ -215,55 +215,52 @@ impl DPLL {
         let mut queue: Vec<Literal> = self.initial_units.clone();
 
         loop {
+            // --- Stage 1: Unit Propagation Loop ---
             while let Some(lit) = queue.pop() {
-                let is_assigned = !self.valuation.is_undef(lit);
-                if is_assigned {
-                    let is_already_false = self.valuation.is_false(lit);
-                    if is_already_false {
-                        if !self.handle_conflict(&mut queue) {
-                            return false;
+                // Check current valuation state for the literal
+                match (self.valuation.is_undef(lit), self.valuation.is_false(lit)) {
+                    // Literal is already assigned: check if it contradicts the current path
+                    (false, true) => {
+                        match self.handle_conflict(&mut queue) {
+                            false => return false, // Conflict at root level -> UNSAT
+                            true => continue,      // Conflict resolved -> keep propagating
                         }
                     }
-                    continue;
-                }
-                self.valuation.assign(lit, false);
+                    (false, false) => continue, // Already assigned correctly, skip
 
-                // Capture the result of the propagation attempt
-                let found_conflict = self.propagate(-lit, &mut queue);
-                if found_conflict {
-                    // Define the resolution status
-                    let is_resolvable = self.handle_conflict(&mut queue);
+                    // Literal is unassigned: assign it and propagate the implication
+                    (true, _) => {
+                        self.valuation.assign(lit, false);
 
-                    // If the conflict cannot be resolved (e.g., at root level),
-                    // the formula is UNSAT
-                    if !is_resolvable {
-                        return false;
+                        // Propagate the consequences of this assignment
+                        match self.propagate(-lit, &mut queue) {
+                            true => match self.handle_conflict(&mut queue) {
+                                false => return false, // Propagation led to unresolvable conflict
+                                true => {}             // Conflict handled, continue loop
+                            },
+                            false => {} // No conflict, proceed
+                        }
                     }
                 }
             }
 
-            // Selection: Identify the next branching point
-            let next_var = self.valuation.next_undef_var();
+            // --- Stage 2: Variable Selection (Branching) ---
+            match self.valuation.next_undef_var() {
+                // All variables assigned with no conflicts -> SAT
+                NULL_LITERAL => return true,
 
-            // If no variables are left to assign, the current model satisfies the formula
-            if next_var == NULL_LITERAL {
-                return true; // Satisfiable (SAT)
-            }
+                // Branch on an unassigned variable
+                decision_lit => {
+                    self.valuation.assign(decision_lit, true);
 
-            // 2. Decision: Branch on the selected literal
-            let decision_lit = next_var;
-            self.valuation.assign(decision_lit, true);
-
-            // 3. Propagation: Check if the opposite assignment causes a contradiction
-            let propagation_found_conflict = self.propagate(-decision_lit, &mut queue);
-
-            if propagation_found_conflict {
-                // 4. Resolution: Attempt to recover from the conflict (e.g., via backjumping)
-                let is_recoverable = self.handle_conflict(&mut queue);
-
-                // If the conflict is at the root level, no solution exists
-                if !is_recoverable {
-                    return false; // Unsatisfiable (UNSAT)
+                    // Propagate the decision
+                    match self.propagate(-decision_lit, &mut queue) {
+                        true => match self.handle_conflict(&mut queue) {
+                            false => return false, // Decision led to unresolvable conflict
+                            true => {}             // Conflict handled, loop back to propagation
+                        },
+                        false => {} // No immediate conflict, loop back to propagation
+                    }
                 }
             }
         }

@@ -110,6 +110,13 @@ impl PartialValuation {
     }
 }
 
+#[derive(Debug, PartialEq)]
+enum ConflictResolution {
+    Resolved,
+    StillConflicting,
+    RootLevelReached,
+}
+
 struct DPLL {
     formula: CNFFormula,
     valuation: PartialValuation,
@@ -266,18 +273,35 @@ impl DPLL {
         }
     }
 
-    fn handle_conflict(&mut self, queue: &mut Vec<Literal>) -> bool {
-        queue.clear();
+    fn handle_conflict(&mut self, propagation_queue: &mut Vec<Literal>) -> bool {
+        propagation_queue.clear();
+
         loop {
-            let Some(flipped) = self.valuation.undo_until_decision() else {
-                return false; // UNSAT
-            };
-            let flip_lit = -flipped;
-            self.valuation.assign(flip_lit, false);
-            if !self.propagate(flipped, queue) {
-                return true; // resolved
+            // 1. Attempt to find the most recent decision point to flip
+            let backtracking_target = self.valuation.undo_until_decision();
+
+            // 2. Map the backtrack result to a Resolution Status
+            // This closure performs the assignment and propagation in a flat pipeline
+            let resolution_attempt = backtracking_target.map(|flipped_lit| {
+                self.valuation.assign(-flipped_lit, false);
+
+                match self.propagate(flipped_lit, propagation_queue) {
+                    true => ConflictResolution::StillConflicting,
+                    false => ConflictResolution::Resolved,
+                }
+            });
+
+            // 3. Single Flat Decision Table
+            // We match on the Status directly. No matches are nested inside others.
+            match resolution_attempt {
+                None => return false, // RootLevelReached: No more decisions to flip (UNSAT)
+
+                Some(ConflictResolution::Resolved) => return true, // Success: Backjump complete
+
+                Some(ConflictResolution::StillConflicting) => (), // Continue: Try next level up
+
+                Some(ConflictResolution::RootLevelReached) => return false, // (Unreachable via map)
             }
-            // else conflict, backtrack further
         }
     }
 

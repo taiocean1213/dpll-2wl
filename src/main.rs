@@ -43,14 +43,27 @@ impl PartialValuation {
     }
 
     fn undo_until_decision(&mut self) -> Option<Literal> {
-        let mut flipped = None;
-        while let Some(lit) = self.trail.pop() {
-            if lit == NULL_LITERAL {
-                return flipped;
+        let trail_length = self.trail.len();
+        assert!(
+            trail_length >= 1,
+            "When calling this method, attribute self.trail must contain at least one element."
+        );
+
+        let mut last_flipped = None;
+
+        // Use the correct range syntax: 0..trail_length
+        for _ in 0..trail_length {
+            match self.trail.pop() {
+                // If we hit the marker, return the literal we just unassigned.
+                // This literal is the "decision" that led to this level.
+                Some(NULL_LITERAL) => return last_flipped,
+                Some(lit) => {
+                    let var = lit.abs() as usize;
+                    self.values[var] = ExtendedBool::Undefined;
+                    last_flipped = Some(lit);
+                }
+                None => panic!("Trail Length does not match!"),
             }
-            let var = lit.abs() as usize;
-            self.values[var] = ExtendedBool::Undefined;
-            flipped = Some(lit);
         }
         None
     }

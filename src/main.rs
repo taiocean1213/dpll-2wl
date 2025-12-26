@@ -390,12 +390,21 @@ impl DPLL {
 
 fn main() {
     let args: Vec<String> = env::args().collect();
-    if args.len() != 2 {
-        eprintln!("Usage: {} <dimacs-file>", args[0]);
-        process::exit(1);
-    }
 
-    let mut solver = match DPLL::new(&args[1]) {
+    // 1. Validate arguments and attempt to initialize the solver in a flat pipeline
+    let initialization_result = match args.len() {
+        2 => DPLL::new(&args[1]),
+        _ => {
+            eprintln!(
+                "Usage: {} <dimacs-file>",
+                args.get(0).unwrap_or(&"solver".into())
+            );
+            process::exit(1);
+        }
+    };
+
+    // 2. Resolve the initialization status
+    let mut solver = match initialization_result {
         Ok(s) => s,
         Err(e) => {
             eprintln!("Failed to read file: {}", e);
@@ -403,10 +412,14 @@ fn main() {
         }
     };
 
-    if solver.solve() {
-        println!("SAT");
-        solver.valuation.print_model();
-    } else {
-        println!("UNSAT");
+    // 3. Match on the final solver result
+    match solver.solve() {
+        true => {
+            println!("SAT");
+            solver.valuation.print_model();
+        }
+        false => {
+            println!("UNSAT");
+        }
     }
 }

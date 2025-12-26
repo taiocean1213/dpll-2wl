@@ -30,15 +30,24 @@ impl PartialValuation {
     }
 
     fn assign(&mut self, lit: Literal, decision: bool) {
-        let var = lit.abs() as usize;
-        self.values[var] = if lit > 0 {
-            ExtendedBool::True
-        } else {
-            ExtendedBool::False
+        let var_index = lit.abs() as usize;
+
+        // 1. Determine the boolean assignment using a flat match on the literal's sign
+        // This replaces the if/else for ExtendedBool assignment
+        self.values[var_index] = match lit > 0 {
+            true => ExtendedBool::True,
+            false => ExtendedBool::False,
         };
-        if decision {
-            self.trail.push(NULL_LITERAL);
+
+        // 2. Manage the trail structure
+        // We match on the 'decision' flag to determine if a marker (NULL_LITERAL)
+        // is required to denote a new decision level.
+        match decision {
+            true => self.trail.push(NULL_LITERAL),
+            false => (),
         }
+
+        // Always record the literal on the trail
         self.trail.push(lit);
     }
 

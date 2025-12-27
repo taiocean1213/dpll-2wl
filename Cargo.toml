@@ -1,5 +1,5 @@
 [package]
-name = "dpll-2wl"
+name = "cnf-dpll-2wl"
 version = "0.1.0"
 edition = "2024"
 

@@ -131,17 +131,17 @@ fn test_2wl_long_clause_unit_propagation() {
 
 #[test]
 fn test_2wl_mechanism_proof() {
-    use std::io::Write;
     let mut file = tempfile::NamedTempFile::new().unwrap();
     writeln!(file, "p cnf 5 1\n1 2 3 4 5 0").unwrap();
 
     let mut solver = Solver::new(file.path().to_str().unwrap()).unwrap();
 
-    // Specify the type as i32 to allow .abs() calls
+    // Specify the type as i32 to allow calculations
     let lits_to_falsify: [i32; 3] = [-3, -4, -5];
 
     for &l in &lits_to_falsify {
-        solver.assign[l.abs() as usize] = Some(l > 0);
+        // DRY/SST FIX: Use the new assignments field and helper methods
+        solver.assignments[Solver::lit_to_var(l)] = Some(l > 0);
         solver.propagate(l);
     }
 
@@ -152,7 +152,7 @@ fn test_2wl_mechanism_proof() {
 
     // Falsify watched literal 1
     let lit1: i32 = -1;
-    solver.assign[1] = Some(false);
+    solver.assignments[1] = Some(false);
     solver.propagate(lit1);
 
     assert_eq!(
